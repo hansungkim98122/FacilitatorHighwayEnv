@@ -43,12 +43,7 @@ class AbstractEnv(gym.Env):
 
         # Configuration
         self.config = self.default_config()
-        if config:
-            self.config.update(config)
-            
-        # Seeding
-        self.np_random = None
-        self.seed = self.config["seed"]
+        self.configure(config)
 
         # Scene
         self.road = None
@@ -72,8 +67,8 @@ class AbstractEnv(gym.Env):
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
         self.enable_auto_render = False
-        self.reset()
 
+        self.reset()
 
     @property
     def vehicle(self) -> Vehicle:
@@ -100,18 +95,15 @@ class AbstractEnv(gym.Env):
             "action": {
                 "type": "DiscreteMetaAction"
             },
-            "simulation_frequency": 10,  # [Hz]
-            "policy_frequency": 10,  # [Hz]
+            "simulation_frequency": 15,  # [Hz]
+            "policy_frequency": 1,  # [Hz]
             "other_vehicles_type": "highway_env.vehicle.behavior.IDMVehicle",
             "screen_width": 600,  # [px]
             "screen_height": 150,  # [px]
             "centering_position": [0.3, 0.5],
             "scaling": 5.5,
-            "seed": 0,
             "show_trajectories": False,
             "render_agent": True,
-            "n_step": 5,  # do n step prediction
-            "action_masking": False,
             "offscreen_rendering": os.environ.get("OFFSCREEN_RENDERING", "0") == "1",
             "manual_control": False,
             "real_time_rendering": False
@@ -279,11 +271,6 @@ class AbstractEnv(gym.Env):
 
         Create a viewer if none exists, and use it to render an image.
         """
-        # print(self.controlled_vehicles)
-        # self.controlled_vehicles[1].position[0] = self.controlled_vehicles[0].position[0]
-        # self.controlled_vehicles[1].position[0] -= 100
-        # print(self.controlled_vehicles)
-
         if self.render_mode is None:
             assert self.spec is not None
             gym.logger.warn(
