@@ -211,10 +211,6 @@ class RoadNetwork(object):
     def lanes_list(self) -> List[AbstractLane]:
         return [lane for to in self.graph.values() for ids in to.values() for lane in ids]
 
-    def lanes_dict(self) -> Dict[str, AbstractLane]:
-        return {(from_, to_, i): lane
-                for from_, tos in self.graph.items() for to_, ids in tos.items() for i, lane in enumerate(ids)}
-
     @staticmethod
     def straight_road_network(lanes: int = 4,
                               start: float = 0,
@@ -309,27 +305,18 @@ class Road(object):
         self.np_random = np_random if np_random else np.random.RandomState()
         self.record_history = record_history
 
-    def close_objects_to(self, vehicle: 'kinematics.Vehicle', distance: float, count: Optional[int] = None,
-                         see_behind: bool = True, sort: bool = True, vehicles_only: bool = False) -> object:
+    def close_vehicles_to(self, vehicle: 'kinematics.Vehicle', distance: float, count: Optional[int] = None,
+                          see_behind: bool = True, sort: bool = True) -> object:
         vehicles = [v for v in self.vehicles
                     if np.linalg.norm(v.position - vehicle.position) < distance
                     and v is not vehicle
                     and (see_behind or -2 * vehicle.LENGTH < vehicle.lane_distance_to(v))]
-        obstacles = [o for o in self.objects
-                     if np.linalg.norm(o.position - vehicle.position) < distance
-                     and -2 * vehicle.LENGTH < vehicle.lane_distance_to(o)]
-
-        objects_ = vehicles if vehicles_only else vehicles + obstacles
 
         if sort:
-            objects_ = sorted(objects_, key=lambda o: abs(vehicle.lane_distance_to(o)))
+            vehicles = sorted(vehicles, key=lambda v: abs(vehicle.lane_distance_to(v)))
         if count:
-            objects_ = objects_[:count]
-        return objects_
-
-    def close_vehicles_to(self, vehicle: 'kinematics.Vehicle', distance: float, count: Optional[int] = None,
-                          see_behind: bool = True, sort: bool = True) -> object:
-        return self.close_objects_to(vehicle, distance, count, see_behind, sort, vehicles_only=True)
+            vehicles = vehicles[:count]
+        return vehicles
 
     def act(self) -> None:
         """Decide the actions of each entity on the road."""
