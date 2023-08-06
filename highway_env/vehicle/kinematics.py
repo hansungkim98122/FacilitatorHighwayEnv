@@ -7,7 +7,7 @@ from highway_env import utils
 from highway_env.road.road import Road, LaneIndex
 from highway_env.vehicle.objects import RoadObject, Obstacle, Landmark
 from highway_env.utils import Vector
-
+from highway_env.vehicle.prediction import HDV_predict
 
 class Vehicle(RoadObject):
 
@@ -22,7 +22,7 @@ class Vehicle(RoadObject):
     """ Vehicle length [m] """
     WIDTH = 2.0
     """ Vehicle width [m] """
-    DEFAULT_INITIAL_SPEEDS = [23, 25]
+    # DEFAULT_INITIAL_SPEEDS = [25, 30]
     """ Range for random initial speeds [m/s] """
     MAX_SPEED = 40.
     """ Maximum reachable speed [m/s] """
@@ -36,15 +36,32 @@ class Vehicle(RoadObject):
                  position: Vector,
                  heading: float = 0,
                  speed: float = 0,
-                 predition_type: str = 'constant_steering'):
+                 prediction_type: str = 'constant_steering'):
         super().__init__(road, position, heading, speed)
-        self.prediction_type = predition_type
+        self.prediction_type = prediction_type
         self.action = {'steering': 0, 'acceleration': 0}
         self.crashed = False
         self.impact = None
         self.log = []
         self.history = deque(maxlen=self.HISTORY_SIZE)
+        self.lc_time = 0
+        self.V2V_enabled = False
+        self.traj = []
+        self.u_prev = [0,0]
+        self.feasible = True
 
+    def get_traj(self,N=None,dt=None,observation=None,is_absolute=True):
+        if self.V2V_enabled:
+            traj = self.traj
+        else:
+            pred_method = HDV_predict(N,dt)  
+            traj = pred_method.predict(observation,is_absolute) 
+        return traj
+    
+    def update_traj(self, traj): #called after low-level MPC is solved
+        self.V2V_enabled  = True
+        self.traj = traj
+        
     @classmethod
     def create_random(cls, road: Road,
                       speed: float = None,
@@ -67,6 +84,7 @@ class Vehicle(RoadObject):
         :param spacing: ratio of spacing to the front vehicle, 1 being the default
         :return: A vehicle with random position and/or speed
         """
+        safety_gap = 10
         _from = lane_from or road.np_random.choice(list(road.network.graph.keys()))
         _to = lane_to or road.np_random.choice(list(road.network.graph[_from].keys()))
         _id = lane_id if lane_id is not None else road.np_random.choice(len(road.network.graph[_from][_to]))
@@ -75,13 +93,68 @@ class Vehicle(RoadObject):
             if lane.speed_limit is not None:
                 speed = road.np_random.uniform(0.7*lane.speed_limit, 0.8*lane.speed_limit)
             else:
+                DEFAULT_INITIAL_SPEEDS = [speed-5, speed] #CUSTOM
                 speed = road.np_random.uniform(Vehicle.DEFAULT_INITIAL_SPEEDS[0], Vehicle.DEFAULT_INITIAL_SPEEDS[1])
-        default_spacing = 12+1.0*speed
+        default_spacing = safety_gap + 1.0*speed
         offset = spacing * default_spacing * np.exp(-5 / 40 * len(road.network.graph[_from][_to]))
         x0 = np.max([lane.local_coordinates(v.position)[0] for v in road.vehicles]) \
             if len(road.vehicles) else 3*offset
-        x0 += offset * road.np_random.uniform(0.9, 1.1)
+        x0 += offset
+
         v = cls(road, lane.position(x0, 0), lane.heading_at(x0), speed)
+        
+        return v
+    
+    @classmethod
+    def create_random_fc(cls, road: Road,
+                      speed: float = None,
+                      lane_from: Optional[str] = None,
+                      lane_to: Optional[str] = None,
+                      lane_id: Optional[int] = None,
+                      spacing: float = 1,
+                      is_max: bool = True) \
+            -> "Vehicle":
+        """
+        Create a random vehicle on the road.
+
+        The lane and /or speed are chosen randomly, while longitudinal position is chosen behind the last
+        vehicle in the road with density based on the number of lanes.
+
+        :param road: the road where the vehicle is driving
+        :param speed: initial speed in [m/s]. If None, will be chosen randomly
+        :param lane_from: start node of the lane to spawn in
+        :param lane_to: end node of the lane to spawn in
+        :param lane_id: id of the lane to spawn in
+        :param spacing: ratio of spacing to the front vehicle, 1 being the default
+        :return: A vehicle with random position and/or speed
+        """
+        #Turnable parameters
+        l_speed = 0.9 #ratio to the speed limit
+        h_speed = 1.1
+        safety_gap  = 10 #m?
+        headway = 1.2 # [second]
+
+        _from = lane_from or road.np_random.choice(list(road.network.graph.keys()))
+        _to = lane_to or road.np_random.choice(list(road.network.graph[_from].keys()))
+        _id = lane_id if lane_id is not None else road.np_random.choice(len(road.network.graph[_from][_to]))
+        lane = road.network.get_lane((_from, _to, _id))
+        if lane.speed_limit is not None:
+            speed_limit = speed #Use Ego speed\
+            speed_ = road.np_random.uniform(l_speed*speed_limit, h_speed*speed_limit)
+        else:
+            speed_ = road.np_random.uniform(Vehicle.DEFAULT_INITIAL_SPEEDS[0], Vehicle.DEFAULT_INITIAL_SPEEDS[1])
+        default_spacing = safety_gap + headway * speed
+        offset = spacing * default_spacing * np.exp(-5 / 40 * len(road.network.graph[_from][_to]))
+        if is_max:
+            x0 = np.max([lane.local_coordinates(v.position)[0] for v in road.vehicles if v.position[1]==_id*lane.width]) \
+                if len([1 for v in road.vehicles if v.position[1]==_id*lane.width]) else 3*offset
+            x0 += offset * road.np_random.uniform(0.95, 1.1)
+        else:
+            x0 = np.min([lane.local_coordinates(v.position)[0] for v in road.vehicles if v.position[1]==_id*lane.width]) \
+                if len([1 for v in road.vehicles if v.position[1]==_id*lane.width]) else 3*offset
+            x0 -= offset * road.np_random.uniform(0.95, 1.1)    
+             
+        v = cls(road, lane.position(x0, 0), lane.heading_at(x0), speed_)
         return v
 
     @classmethod
@@ -156,7 +229,7 @@ class Vehicle(RoadObject):
         elif self.prediction_type == 'constant_steering':
             action = {'acceleration': 0.0, 'steering': self.action['steering']}
         else:
-            raise ValueError("Unknown predition type")
+            raise ValueError("Unknown prediction type")
 
         dt = np.diff(np.concatenate(([0.0], times)))
 
@@ -199,7 +272,7 @@ class Vehicle(RoadObject):
             return np.array([long, lat, ang])
         else:
             return np.zeros((3,))
-
+    
     def to_dict(self, origin_vehicle: "Vehicle" = None, observe_intentions: bool = True) -> dict:
         d = {
             'presence': 1,
@@ -215,6 +288,8 @@ class Vehicle(RoadObject):
             'long_off': self.lane_offset[0],
             'lat_off': self.lane_offset[1],
             'ang_off': self.lane_offset[2],
+            'lane_index': self.lane_index
+            # 'motion_prediction' : self.prediction #CUSTOM
         }
         if not observe_intentions:
             d["cos_d"] = d["sin_d"] = 0
