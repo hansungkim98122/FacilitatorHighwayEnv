@@ -21,6 +21,28 @@ def register_highway_envs():
         entry_point='highway_env.envs:HighwayEnv',
     )
 
+    #Custom: highway_env_facilitator.py
+    register(
+        id='fc-highway-v0',
+        entry_point='highway_env.envs:HighwayEnvFacilitator',
+    )
+
+    #Custom: highway_env_facilitator.py
+    register(
+        id='fc-highway-v1',
+        entry_point='highway_env.envs:HighwayEnvFacilitatorCont',
+    )
+
+    register(
+        id='merge-v1',
+        entry_point='highway_env.envs:MergeEnv',
+    )
+
+    register(
+        id='merge-multi-agent-v0',
+        entry_point='highway_env.envs:MergeEnvMARL',
+    )
+
     register(
         id='highway-fast-v0',
         entry_point='highway_env.envs:HighwayEnvFast',
