@@ -1,5 +1,6 @@
 import itertools
 from typing import List, Tuple, TYPE_CHECKING
+import copy
 
 import numpy as np
 import pygame
@@ -17,11 +18,12 @@ if TYPE_CHECKING:
 class VehicleGraphics(object):
     RED = (255, 100, 100)
     GREEN = (50, 200, 0)
+    ORANGE = (255, 165, 0)
     BLUE = (100, 200, 255)
     YELLOW = (200, 200, 0)
     BLACK = (60, 60, 60)
     PURPLE = (200, 0, 150)
-    DEFAULT_COLOR = YELLOW
+    DEFAULT_COLOR = ORANGE
     EGO_COLOR = GREEN
 
     @classmethod
@@ -47,6 +49,18 @@ class VehicleGraphics(object):
         v = vehicle
         tire_length, tire_width = 1, 0.3
         headlight_length, headlight_width = 0.72, 0.6
+        #############################33
+        # if v_.is_ego3:
+        #     x, y, vx, vy, heading = v_.target_state
+        #     v = copy.deepcopy(v_)
+        #     v.position[0] = x; v.position[1] = y; v.velocity[0] = vx; v.velocity[1] = vy; v.heading = heading
+        # else:
+        #     v = v_
+
+        # tire_length, tire_width = 0, 0 
+        # headlight_length, headlight_width = 0, 0
+        ################################       
+
         roof_length, roof_width = 2.0, 1.5
 
         # Vehicle rectangle

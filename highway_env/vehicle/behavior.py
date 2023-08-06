@@ -30,7 +30,7 @@ class IDMVehicle(ControlledVehicle):
     DISTANCE_WANTED = 5.0 + ControlledVehicle.LENGTH  # [m]
     """Desired jam distance to the front vehicle."""
 
-    TIME_WANTED = 1.5  # [s]
+    TIME_WANTED = 0.5  # [s]
     """Desired time gap to the front vehicle."""
 
     DELTA = 4.0  # []
@@ -151,8 +151,11 @@ class IDMVehicle(ControlledVehicle):
 
         if front_vehicle:
             d = ego_vehicle.lane_distance_to(front_vehicle)
+            # print(d - self.desired_gap(ego_vehicle, front_vehicle) )
             acceleration -= self.COMFORT_ACC_MAX * \
                 np.power(self.desired_gap(ego_vehicle, front_vehicle) / utils.not_zero(d), 2)
+            # print(self.desired_gap(ego_vehicle, front_vehicle) / utils.not_zero(d))
+            # print(acceleration)
         return acceleration
 
     def desired_gap(self, ego_vehicle: Vehicle, front_vehicle: Vehicle = None, projected: bool = True) -> float:
